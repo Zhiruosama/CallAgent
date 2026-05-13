@@ -255,8 +255,17 @@ MILVUS_PORT=19530
 
 # RAG 配置
 RAG_TOP_K=3
+RAG_MODEL=qwen-max
 CHUNK_MAX_SIZE=800
 CHUNK_OVERLAP=100
+
+# Agent 对话（OpenAI 兼容 /chat/completions；可接 DeepSeek 官方，不必走百炼）
+# 默认 AGENT_OPENAI_BASE_URL 为 DashScope 兼容地址；仅填密钥时仍可用原 RAG_MODEL + 百炼
+# 接 DeepSeek 官方示例：
+# AGENT_OPENAI_BASE_URL=https://api.deepseek.com/v1
+# AGENT_OPENAI_API_KEY=sk-你的DeepSeek密钥
+# AGENT_OPENAI_MODEL=deepseek-chat
+# AGENT_OPENAI_API_KEY 留空则回退使用 DASHSCOPE_API_KEY；AGENT_OPENAI_MODEL 留空则回退使用 RAG_MODEL
 ```
 
 ## 🎯 AIOps 智能运维

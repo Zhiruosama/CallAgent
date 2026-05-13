@@ -36,7 +36,14 @@ class Settings(BaseSettings):
 
     # RAG 配置
     rag_top_k: int = 3
-    rag_model: str = "qwen-max"  # 使用快速响应模型，不带扩展思考
+    rag_model: str = "qwen-max"  # 未单独配置 agent_openai_model 时，Agent 对话默认使用的模型名
+
+    # Agent 对话 LLM（OpenAI 兼容协议 /chat/completions）
+    # 接 DeepSeek 官方：设置 AGENT_OPENAI_BASE_URL=https://api.deepseek.com/v1 与 AGENT_OPENAI_API_KEY、AGENT_OPENAI_MODEL
+    # 留空 api_key 或 model 时分别回退为 dashscope_api_key、rag_model（便于沿用原百炼配置）
+    agent_openai_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    agent_openai_api_key: str = ""
+    agent_openai_model: str = ""
 
     # 文档分块配置
     chunk_max_size: int = 800

@@ -1,7 +1,7 @@
 """RAG Agent 服务 - 基于 LangGraph 的智能代理
 
-使用 langchain_qwq 的 ChatQwen 原生集成，
-支持真正的流式输出和更好的模型适配。
+对话模型使用 OpenAI 兼容协议（langchain_openai.ChatOpenAI），
+可通过配置接入 DeepSeek 官方 API、DashScope 兼容模式等。
 """
 
 from typing import Annotated, Any, AsyncGenerator, Dict, Sequence
@@ -17,17 +17,12 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from loguru import logger
 from typing_extensions import TypedDict
-from langchain_qwq import ChatQwen
 
 from app.config import config
+from app.core.llm_factory import LLMFactory
 from app.tools import get_current_time, recall_session_memories, retrieve_enriched_context, retrieve_knowledge, save_session_memory
 from app.tools.memory_tool import memory_session_token_reset, memory_session_token_set
 from app.agent.mcp_client import get_mcp_client_with_retry
-
-# 阿里千问大模型和langchain集成参考： https://docs.langchain.com/oss/python/integrations/chat/qwen
-# 注意：需要配置环境变量 DASHSCOPE_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1 否则默认访问的是新加坡站点
-# 同时也需要配置环境变量 DASHSCOPE_API_KEY=your_api_key
-
 
 class AgentState(TypedDict):
     """Agent 状态"""
@@ -75,7 +70,7 @@ def trim_messages_middleware(state: AgentState) -> dict[str, Any] | None:
 
 
 class RagAgentService:
-    """RAG Agent 服务 - 使用 LangGraph + ChatQwen 原生集成"""
+    """RAG Agent 服务 - 使用 LangGraph + OpenAI 兼容对话模型"""
 
     def __init__(self, streaming: bool = True):
         """初始化 RAG Agent 服务
@@ -83,17 +78,14 @@ class RagAgentService:
         Args:
             streaming: 是否启用流式输出，默认为 True
         """
-        self.model_name = config.rag_model
         self.streaming = streaming
         self.system_prompt = self._build_system_prompt()
 
-
-        self.model = ChatQwen(
-            model=self.model_name,
-            api_key=config.dashscope_api_key,
+        self.model = LLMFactory.create_agent_chat_model(
             temperature=0.7,
             streaming=streaming,
         )
+        self.model_name = (config.agent_openai_model or "").strip() or config.rag_model
 
         # 定义基础工具（会话记忆工具依赖 ContextVar，由 query/query_stream 绑定 session_id）
         self.tools = [
@@ -114,7 +106,11 @@ class RagAgentService:
         self.agent = None
         self._agent_initialized = False
 
-        logger.info(f"RAG Agent 服务初始化完成 (ChatQwen), model={self.model_name}, streaming={streaming}")
+        logger.info(
+            "RAG Agent 服务初始化完成 (OpenAI-compatible), model={}, streaming={}",
+            self.model_name,
+            streaming,
+        )
 
     async def _initialize_agent(self):
         """异步初始化 Agent（包括 MCP 工具）"""
