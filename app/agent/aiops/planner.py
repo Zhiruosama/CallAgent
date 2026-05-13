@@ -11,7 +11,13 @@ from pydantic import BaseModel, Field
 from loguru import logger
 
 from app.config import config
-from app.tools import get_current_time, retrieve_knowledge
+from app.tools import (
+    get_current_time,
+    recall_session_memories,
+    retrieve_enriched_context,
+    retrieve_knowledge,
+    save_session_memory,
+)
 from app.agent.mcp_client import get_mcp_client_with_retry
 from .state import PlanExecuteState
 from .utils import format_tools_description
@@ -78,9 +84,7 @@ async def planner(state: PlanExecuteState) -> Dict[str, Any]:
         logger.info("查询内部文档，寻找相关经验...")
         experience_docs = ""
         try:
-            # retrieve_knowledge 使用 response_format="content_and_artifact"
-            # ainvoke() 只返回 content（字符串），不是元组
-            context_str = await retrieve_knowledge.ainvoke({"query": input_text})
+            context_str = await retrieve_enriched_context.ainvoke({"query": input_text})
             if context_str and context_str.strip():
                 experience_docs = context_str
                 logger.info(f"找到相关经验文档，长度: {len(experience_docs)}")
@@ -92,8 +96,11 @@ async def planner(state: PlanExecuteState) -> Dict[str, Any]:
         # 步骤2: 获取可用工具列表
         # 获取本地工具
         local_tools = [
+            retrieve_enriched_context,
+            retrieve_knowledge,
             get_current_time,
-            retrieve_knowledge
+            save_session_memory,
+            recall_session_memories,
         ]
 
         # 获取 MCP 工具

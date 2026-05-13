@@ -16,7 +16,7 @@ from loguru import logger
 from app.config import config
 from app.memory.migrations import apply_pending_migrations
 
-ALLOWED_KINDS = frozenset({"episodic", "semantic_ref", "scratch", "meta"})
+ALLOWED_KINDS = frozenset({"episodic", "semantic_ref", "scratch", "meta", "note"})
 ALLOWED_SOURCES = frozenset({"user", "agent", "system"})
 
 

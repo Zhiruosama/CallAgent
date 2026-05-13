@@ -10,7 +10,13 @@ from langgraph.prebuilt import ToolNode
 from loguru import logger
 
 from app.config import config
-from app.tools import get_current_time, retrieve_knowledge
+from app.tools import (
+    get_current_time,
+    recall_session_memories,
+    retrieve_enriched_context,
+    retrieve_knowledge,
+    save_session_memory,
+)
 from app.agent.mcp_client import get_mcp_client_with_retry
 from .state import PlanExecuteState
 
@@ -37,8 +43,11 @@ async def executor(state: PlanExecuteState) -> Dict[str, Any]:
     try:
         # 获取本地工具
         local_tools = [
+            retrieve_enriched_context,
+            retrieve_knowledge,
             get_current_time,
-            retrieve_knowledge
+            save_session_memory,
+            recall_session_memories,
         ]
 
         # 获取 MCP 工具
@@ -74,7 +83,8 @@ async def executor(state: PlanExecuteState) -> Dict[str, Any]:
 - 如果工具调用失败，请说明失败原因
 - 不要编造数据，只返回实际获取的信息
 - 执行结果要清晰、准确
-- 专注于当前步骤，不要考虑其他任务"""),
+- 专注于当前步骤，不要考虑其他任务
+- 需要同时查知识库与本会话已记事项时，优先使用 retrieve_enriched_context；可酌情使用 save_session_memory 持久化关键结论"""),
             HumanMessage(content=f"请执行以下任务: {task}")
         ]
 

@@ -11,7 +11,13 @@ from pydantic import BaseModel, Field
 from loguru import logger
 
 from app.config import config
-from app.tools import get_current_time, retrieve_knowledge
+from app.tools import (
+    get_current_time,
+    recall_session_memories,
+    retrieve_enriched_context,
+    retrieve_knowledge,
+    save_session_memory,
+)
 from app.agent.mcp_client import get_mcp_client_with_retry
 from .state import PlanExecuteState
 from .utils import format_tools_description
@@ -141,8 +147,11 @@ async def replanner(state: PlanExecuteState) -> Dict[str, Any]:
     try:
         # 获取本地工具
         local_tools = [
+            retrieve_enriched_context,
+            retrieve_knowledge,
             get_current_time,
-            retrieve_knowledge
+            save_session_memory,
+            recall_session_memories,
         ]
 
         # 获取 MCP 工具

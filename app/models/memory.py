@@ -15,7 +15,7 @@ class MemoryMilvusRefItem(BaseModel):
 class MemoryCreateRequest(BaseModel):
     """创建记忆请求体"""
 
-    kind: str = Field(..., description="episodic | semantic_ref | scratch | meta")
+    kind: str = Field(..., description="episodic | semantic_ref | scratch | meta | note")
     source: str = Field(..., description="user | agent | system")
     session_id: str | None = Field(None, description="会话/线程 ID")
     title: str | None = None

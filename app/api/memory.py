@@ -164,7 +164,7 @@ async def create_memory(body: MemoryCreateRequest) -> dict[str, Any]:
 async def list_memories(
     query: str | None = Query(None, description="标题/摘要/正文 子串匹配"),
     session_id: str | None = Query(None),
-    kind: str | None = Query(None, description="episodic | semantic_ref | scratch | meta"),
+    kind: str | None = Query(None, description="episodic | semantic_ref | scratch | meta | note"),
     limit: int = Query(20, ge=1, le=500),
     include_deleted: bool = Query(False),
 ) -> dict[str, Any]:

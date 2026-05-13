@@ -9,6 +9,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from loguru import logger
 
 from app.agent.aiops import PlanExecuteState, planner, executor, replanner
+from app.tools.memory_tool import memory_session_token_reset, memory_session_token_set
 
 
 # 节点名称常量
@@ -95,6 +96,7 @@ class AIOpsService:
         """
         logger.info(f"[会话 {session_id}] 开始执行任务: {user_input}")
 
+        mem_tok = memory_session_token_set(session_id)
         try:
             # 初始化状态
             initial_state: PlanExecuteState = {
@@ -155,6 +157,8 @@ class AIOpsService:
                 "stage": "error",
                 "message": f"任务执行出错: {str(e)}"
             }
+        finally:
+            memory_session_token_reset(mem_tok)
 
     async def diagnose(
         self,

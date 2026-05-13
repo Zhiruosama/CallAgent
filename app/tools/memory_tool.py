@@ -36,7 +36,7 @@ def get_memory_session_id_for_tools() -> str | None:
     return _current_session_id()
 
 
-_ALLOWED_SAVE_KINDS = frozenset({"episodic", "semantic_ref", "scratch", "meta"})
+_ALLOWED_SAVE_KINDS = frozenset({"episodic", "semantic_ref", "scratch", "meta", "note"})
 
 
 @tool
@@ -48,12 +48,12 @@ def save_session_memory(
     """将本轮值得记住的信息写入长期记忆（SQLite），供后续对话检索。
 
     当用户明确要求记住、或达成需要跨轮保留的约定/事实时使用。
-    summary 应简短准确；kind 一般为 episodic（事件）或 meta（偏好/配置类）。
+    summary 应简短准确；kind 一般为 episodic（事件）、note（人工短记）或 meta（偏好/配置类）。
 
     Args:
         summary: 要保存的摘要（必填）
         title: 可选短标题
-        kind: episodic | semantic_ref | scratch | meta，默认 episodic
+        kind: episodic | semantic_ref | scratch | meta | note，默认 episodic
     """
     sid = _current_session_id()
     if not sid:
