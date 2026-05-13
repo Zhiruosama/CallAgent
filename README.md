@@ -139,7 +139,7 @@ python -c "import requests, os, time; [requests.post('http://localhost:9900/api/
 | 普通对话     | POST | `/api/chat`        | 一次性返回      |
 | 流式对话     | POST | `/api/chat_stream` | SSE 流式输出   |
 | AIOps 诊断 | POST | `/api/aiops`       | 自动故障诊断（流式） |
-| 文件上传     | POST | `/api/upload`      | 上传并索引文档    |
+| 文件上传     | POST | `/api/upload`      | 上传并索引文档（`.txt` / `.md` / `.pdf`，文本型 PDF） |
 | 健康检查     | GET  | `/api/health`      | 服务状态检查     |
 
 

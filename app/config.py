@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     chunk_max_size: int = 800
     chunk_overlap: int = 100
 
+    # PDF 入库：文本抽取上限（防恶意超大文件）
+    pdf_max_pages: int = 200
+    pdf_max_extract_chars: int = 500_000
+
     # 记忆系统（SQLite，路径扩展名一般为 .sqlite，已在 .gitignore 中忽略）
     memory_db_path: str = "data/memory.sqlite"
     # 统一检索工具中，本会话记忆最多返回条数（1–20）

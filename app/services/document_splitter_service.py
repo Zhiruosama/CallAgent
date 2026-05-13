@@ -119,12 +119,9 @@ class DocumentSplitterService:
         """
         智能分割文档 (根据文件类型选择分割器)
 
-        Args:
-            content: 文档内容
-            file_path: 文件路径
-
-        Returns:
-            List[Document]: 文档分片列表
+        - .md：Markdown 标题 + 递归分块
+        - .pdf：调用方应已用 `read_source_text` 抽成纯文本，此处与 .txt 相同走 split_text
+        - 其他：纯文本分块
         """
         if file_path.endswith(".md"):
             return self.split_markdown(content, file_path)
