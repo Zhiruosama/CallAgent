@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     chunk_max_size: int = 800
     chunk_overlap: int = 100
 
+    # 记忆系统（SQLite，路径扩展名一般为 .sqlite，已在 .gitignore 中忽略）
+    memory_db_path: str = "data/memory.sqlite"
+
     # MCP 服务配置
     mcp_cls_transport: str = "streamable-http"
     mcp_cls_url: str = "http://localhost:8003/mcp"
