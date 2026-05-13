@@ -184,6 +184,11 @@ class SuperBizAgentApp {
         // 工具菜单项点击事件
         if (this.uploadFileItem) {
             this.uploadFileItem.addEventListener('click', () => {
+                if (this.isStreaming) {
+                    this.showNotification('请等待当前操作完成后再上传', 'warning');
+                    this.closeToolsMenu();
+                    return;
+                }
                 if (this.fileInput) {
                     this.fileInput.click();
                 }
@@ -1092,7 +1097,7 @@ class SuperBizAgentApp {
         if (file) {
             // 验证文件格式
             if (!this.validateFileType(file)) {
-                this.showNotification('只支持上传 TXT 或 Markdown (.md) 格式的文件', 'error');
+                this.showNotification(this.fileTypeRejectedMessage(), 'error');
                 this.fileInput.value = '';
                 return;
             }
@@ -1100,25 +1105,48 @@ class SuperBizAgentApp {
         }
     }
 
-    // 验证文件类型
+    /** 不支持时的统一提示（与后端白名单一致） */
+    fileTypeRejectedMessage() {
+        return '不支持的文件类型，请上传 TXT、Markdown（.md）或 PDF（.pdf）';
+    }
+
+    /**
+     * 校验是否允许上传：先看扩展名，再看 MIME（部分浏览器/导出文件扩展名异常时仍可能识别）。
+     */
     validateFileType(file) {
-        const fileName = file.name.toLowerCase();
-        const allowedExtensions = ['.txt', '.md', '.markdown'];
-        return allowedExtensions.some(ext => fileName.endsWith(ext));
+        if (!file || typeof file.name !== 'string') {
+            return false;
+        }
+        const name = file.name.trim().toLowerCase();
+        const allowedExt = ['.txt', '.md', '.markdown', '.pdf'];
+        if (allowedExt.some((ext) => name.endsWith(ext))) {
+            return true;
+        }
+        const mime = (file.type || '').toLowerCase();
+        if (mime === 'application/pdf' || mime === 'application/x-pdf') {
+            return true;
+        }
+        if (mime === 'text/plain') {
+            return true;
+        }
+        if (mime === 'text/markdown' || mime === 'text/x-markdown') {
+            return true;
+        }
+        return false;
     }
 
     // 上传文件到知识库
     async uploadFile(file) {
         // 再次验证文件类型（双重保险）
         if (!this.validateFileType(file)) {
-            this.showNotification('只支持上传 TXT 或 Markdown (.md) 格式的文件', 'error');
+            this.showNotification(this.fileTypeRejectedMessage(), 'error');
             return;
         }
 
-        // 验证文件大小（限制为50MB）
-        const maxSize = 50 * 1024 * 1024;
+        // 与后端一致：单文件最大 10MB
+        const maxSize = 10 * 1024 * 1024;
         if (file.size > maxSize) {
-            this.showNotification('文件大小不能超过50MB', 'error');
+            this.showNotification('文件大小不能超过 10MB', 'error');
             return;
         }
 
