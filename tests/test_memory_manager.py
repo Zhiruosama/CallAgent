@@ -69,20 +69,48 @@ def test_retrieve_text_query(mgr: MemoryManager) -> None:
 
 
 def test_soft_delete_not_returned_by_default(mgr: MemoryManager) -> None:
-    # 一期尚未实现 delete API，直接用 SQL 模拟软删列
     mid = mgr.add_memory(
         MemoryAddInput(kind="scratch", source="user", summary="tmp"),
     )
-    with mgr._session() as conn:
-        conn.execute(
-            "UPDATE memories SET deleted_at = ? WHERE id = ?",
-            ("2099-01-01T00:00:00+00:00", mid),
-        )
-        conn.commit()
-
+    assert mgr.soft_delete_memory(mid) is True
     assert mgr.retrieve_memories(query="tmp", limit=10) == []
     rows = mgr.retrieve_memories(query="tmp", limit=10, include_deleted=True)
     assert len(rows) == 1
+
+
+def test_soft_delete_twice_returns_false(mgr: MemoryManager) -> None:
+    mid = mgr.add_memory(MemoryAddInput(kind="meta", source="user", summary="x"))
+    assert mgr.soft_delete_memory(mid) is True
+    assert mgr.soft_delete_memory(mid) is False
+
+
+def test_purge_session_memories(mgr: MemoryManager) -> None:
+    mgr.add_memory(
+        MemoryAddInput(kind="episodic", source="user", session_id="sp", summary="a"),
+    )
+    mgr.add_memory(
+        MemoryAddInput(kind="meta", source="user", session_id="sp", summary="b"),
+    )
+    mgr.add_memory(
+        MemoryAddInput(kind="meta", source="user", session_id="other", summary="c"),
+    )
+    n = mgr.purge_session_memories("sp")
+    assert n == 2
+    assert len(mgr.retrieve_memories(session_id="sp", limit=10)) == 0
+    assert len(mgr.retrieve_memories(session_id="other", limit=10)) == 1
+
+
+def test_get_memory_stats(mgr: MemoryManager) -> None:
+    mgr.add_memory(MemoryAddInput(kind="episodic", source="user", session_id="st1", summary="a"))
+    mgr.add_memory(MemoryAddInput(kind="meta", source="user", session_id="st2", summary="b"))
+    mid = mgr.add_memory(MemoryAddInput(kind="scratch", source="user", summary="delme"))
+    mgr.soft_delete_memory(mid)
+    stats = mgr.get_memory_stats()
+    assert stats["active_total"] == 2
+    assert stats["soft_deleted_total"] == 1
+    assert stats["distinct_session_ids"] == 2
+    assert "episodic" in stats["active_by_kind"]
+    assert "meta" in stats["active_by_kind"]
 
 
 def test_milvus_ref_roundtrip(mgr: MemoryManager) -> None:

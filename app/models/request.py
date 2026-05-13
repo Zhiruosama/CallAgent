@@ -26,6 +26,11 @@ class ClearRequest(BaseModel):
     """清空会话请求"""
 
     session_id: str = Field(..., description="会话 ID", alias="sessionId")
+    wipe_sqlite_memories: bool = Field(
+        False,
+        description="为 true 时同时软删该会话在 SQLite 中的全部记忆（与 LangGraph 线程一致）",
+        alias="wipeSqliteMemories",
+    )
 
     class Config:
         populate_by_name = True

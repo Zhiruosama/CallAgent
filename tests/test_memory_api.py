@@ -55,3 +55,41 @@ def test_get_memory_list(memory_client: TestClient) -> None:
     assert res.status_code == 200
     data = res.json()["data"]
     assert data["count"] >= 1
+
+
+def test_memory_stats(memory_client: TestClient) -> None:
+    memory_client.post(
+        "/api/memory",
+        json={"kind": "episodic", "source": "user", "session_id": "sx", "summary": "s"},
+    )
+    res = memory_client.get("/api/memory/stats")
+    assert res.status_code == 200
+    d = res.json()["data"]
+    assert d["success"] is True
+    assert d["active_total"] >= 1
+
+
+def test_delete_and_purge_flow(memory_client: TestClient) -> None:
+    r = memory_client.post(
+        "/api/memory",
+        json={
+            "kind": "scratch",
+            "source": "user",
+            "session_id": "spx",
+            "summary": "one",
+        },
+    )
+    mid = r.json()["data"]["id"]
+    dres = memory_client.delete(f"/api/memory/{mid}")
+    assert dres.json()["code"] == 200
+    pres = memory_client.post("/api/memory/purge", params={"session_id": "spx"})
+    assert pres.json()["code"] == 200
+    assert pres.json()["data"]["purged_count"] == 0
+
+
+def test_purge_with_delete_method_returns_hint(memory_client: TestClient) -> None:
+    res = memory_client.delete("/api/memory/purge")
+    assert res.status_code == 405
+    body = res.json()
+    assert body["code"] == 405
+    assert "POST" in body["data"]["error"]

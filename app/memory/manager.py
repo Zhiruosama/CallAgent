@@ -178,6 +178,80 @@ class MemoryManager:
 
         return [_row_to_dict(row) for row in rows]
 
+    def soft_delete_memory(self, memory_id: str) -> bool:
+        """按 id 软删一条记忆。不存在或已删则返回 False。"""
+        if not memory_id or not str(memory_id).strip():
+            raise ValueError("memory_id 不能为空")
+        now = _utc_now_iso()
+        with self._session() as conn:
+            cur = conn.execute(
+                """
+                UPDATE memories
+                SET deleted_at = ?, updated_at = ?
+                WHERE id = ? AND deleted_at IS NULL
+                """,
+                (now, now, memory_id.strip()),
+            )
+            ok = cur.rowcount > 0
+        if ok:
+            logger.info(f"memory soft-deleted id={memory_id}")
+        return bool(ok)
+
+    def purge_session_memories(self, session_id: str) -> int:
+        """软删指定 session_id 下所有未删除的记忆，返回影响行数。"""
+        if not session_id or not str(session_id).strip():
+            raise ValueError("session_id 不能为空")
+        now = _utc_now_iso()
+        with self._session() as conn:
+            cur = conn.execute(
+                """
+                UPDATE memories
+                SET deleted_at = ?, updated_at = ?
+                WHERE session_id = ? AND deleted_at IS NULL
+                """,
+                (now, now, session_id.strip()),
+            )
+            n = cur.rowcount
+        logger.info(f"purge_session_memories session_id={session_id} rows={n}")
+        return int(n)
+
+    def get_memory_stats(self) -> dict[str, Any]:
+        """库内记忆条数统计（不含 FTS）。"""
+        with self._session() as conn:
+            active = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM memories WHERE deleted_at IS NULL"
+                ).fetchone()[0]
+            )
+            soft_deleted = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM memories WHERE deleted_at IS NOT NULL"
+                ).fetchone()[0]
+            )
+            rows = conn.execute(
+                """
+                SELECT kind, COUNT(*) AS c
+                FROM memories
+                WHERE deleted_at IS NULL
+                GROUP BY kind
+                """
+            ).fetchall()
+            sessions = int(
+                conn.execute(
+                    """
+                    SELECT COUNT(DISTINCT session_id) FROM memories
+                    WHERE deleted_at IS NULL AND session_id IS NOT NULL AND TRIM(session_id) != ''
+                    """
+                ).fetchone()[0]
+            )
+        by_kind = {str(r["kind"]): int(r["c"]) for r in rows}
+        return {
+            "active_total": active,
+            "soft_deleted_total": soft_deleted,
+            "distinct_session_ids": sessions,
+            "active_by_kind": by_kind,
+        }
+
 
 def _normalize_tag(tag: str) -> str:
     return tag.strip().lower()

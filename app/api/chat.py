@@ -3,13 +3,16 @@
 提供基于 RAG Agent 的普通对话和流式对话接口
 """
 
+import asyncio
 import json
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
-from app.models.request import ChatRequest, ClearRequest
-from app.models.response import SessionInfoResponse, ApiResponse
-from app.services.rag_agent_service import rag_agent_service
 from loguru import logger
+
+from app.memory import get_memory_manager
+from app.models.request import ChatRequest, ClearRequest
+from app.models.response import ApiResponse, SessionInfoResponse
+from app.services.rag_agent_service import rag_agent_service
 
 router = APIRouter()
 
@@ -181,12 +184,36 @@ async def clear_session(request: ClearRequest):
     """
     try:
         success = rag_agent_service.clear_session(request.session_id)
-        logger.info(f"清空会话: {request.session_id}, 结果: {success}")
+        mem_purged = 0
+        if success and request.wipe_sqlite_memories:
+            mem_purged = await asyncio.to_thread(
+                get_memory_manager().purge_session_memories,
+                request.session_id,
+            )
+        logger.info(
+            f"清空会话: {request.session_id}, checkpointer_ok={success}, "
+            f"memories_purged={mem_purged}, wipe_sqlite={request.wipe_sqlite_memories}"
+        )
+
+        if not success:
+            return ApiResponse(
+                status="error",
+                message="清空会话失败",
+                data=None,
+            )
+
+        msg = "会话已清空"
+        if request.wipe_sqlite_memories:
+            msg += f"；已软删该会话记忆 {mem_purged} 条"
 
         return ApiResponse(
-            status="success" if success else "error",
-            message="会话已清空" if success else "清空会话失败",
-            data=None
+            status="success",
+            message=msg,
+            data={
+                "checkpointer_cleared": True,
+                "memories_purged": mem_purged,
+                "wipe_sqlite_memories": request.wipe_sqlite_memories,
+            },
         )
 
     except Exception as e:

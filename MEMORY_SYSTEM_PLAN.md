@@ -1,7 +1,8 @@
 # 记忆系统后续实施计划（规划稿）
 
 > **决策**：一期 **不引入 Neo4j**。语义检索继续 **Milvus**；结构化长期记忆 **SQLite**；Working 仍以 LangGraph 会话状态为主，可选进程内 TTL。  
-> 本文含：**完整系统架构图**、**记忆子系统流程图**、**架构自查**、**SQLite 表设计讨论与推荐草案**。
+> 本文含：**完整系统架构图**、**记忆子系统流程图**、**架构自查**、**SQLite 表设计讨论与推荐草案**、**实施记录（第 8 节）**。  
+> **状态（2026-05）**：对话侧 **记忆系统一期主体已落地**（SQLite + API + RAG 工具 + 合并检索 + 管理与清空联动）；**AIOps 图内挂记忆** 仍列为后续项。
 
 ---
 
@@ -33,7 +34,7 @@ flowchart TB
     CH["/api/chat · chat_stream · clear"]
     FI["/api/upload · index_directory"]
     AI["/api/aiops SSE"]
-    MEM_API["/api/memory 等（规划）"]
+    MEM_API["/api/memory 已落地\nstats·purge·CRUD"]
   end
 
   subgraph MemoryLayer["一期新增：统一记忆层"]
@@ -82,9 +83,8 @@ flowchart TB
   CH --> RAG
   FI --> VIDX
   AI --> AIO
+  CH --> MM
   MEM_API --> MM
-
-  CH -.规划集成.-> MM
   AI -.规划集成.-> MM
 
   MM --> SQLITE
@@ -123,9 +123,9 @@ flowchart TB
 
 **读图说明**
 
-- **实线**：现有主数据流。  
-- **虚线**：规划期与 Agent 的挂钩方式（对话 / AIOps 在需要「写入或检索记忆」时调 `MemoryManager`；具体调用点实施阶段再定）。  
-- **MemoryManager → VSM**：仅在「某类记忆需要向量化」或「retrieve 要与 Milvus 联合 Top-K」时发生；纯结构化记忆可只读写 SQLite。
+- **实线**：现有主数据流；**对话**经 `/api/chat` 与 RAG Agent 已可写/读 SQLite 记忆（见第 8 节）。  
+- **MemoryManager → VSM**：仅在「某类记忆需要向量化」或「retrieve 要与 Milvus 联合 Top-K」时发生；纯结构化记忆可只读写 SQLite。  
+- **AIOps**：与 `MemoryManager` 的虚线挂钩仍为 **后续**（当前未在 planner/executor 绑 `session_id` 工具）。
 
 ---
 
@@ -279,21 +279,24 @@ flowchart TB
 
 ---
 
-## 5. 目标与路线图（节选，与初稿一致）
+## 5. 目标与路线图（与实施状态对照）
 
-| 操作类型 | 能力概要 |
-|----------|----------|
-| 添加记忆 | 路由后写 SQLite；需向量则写 Milvus 并写 `memory_milvus_refs` |
-| 搜索记忆 | SQLite + 可选 Milvus 并行，聚合 Top-K |
-| 管理操作 | 整合、遗忘、统计；不替代现有 Milvus 集合运维 |
+| 操作类型 | 能力概要 | 实施状态 |
+|----------|----------|----------|
+| 添加记忆 | 路由后写 SQLite；可选 `memory_milvus_refs` | **已落地**：`MemoryManager.add_memory`、REST `POST /api/memory`、工具 `save_session_memory` |
+| 搜索记忆 | SQLite 条件 + LIKE；与知识库合并入口 | **已落地**：`retrieve_memories`、`GET /api/memory`、工具 `recall_session_memories`、**`retrieve_enriched_context`**（Milvus + 本会话记忆） |
+| 管理操作 | 遗忘、统计、按会话清理 | **已落地**：`GET /api/memory/stats`、`DELETE /api/memory/{id}` 软删、`POST /api/memory/purge?session_id=` 批量软删；误用 `DELETE …/purge` 返回 **405** 提示改用 POST |
+| 与对话清空一致 | 清 LangGraph 时可选用时清 SQLite 同会话 | **已落地**：`POST /api/chat/clear` 增加 **`wipeSqliteMemories`**（默认 `false`） |
 
-| 阶段 | 内容 |
-|------|------|
-| P0 | 定稿表结构 + migration 约定 |
-| P1 | MemoryManager 最小实现 + 测试 |
-| P2 | 与 `retrieve_knowledge` 聚合策略 |
-| P3 | 过期、清理、简单 consolidate |
-| P4 | 若 SQLite 关系不足再评估专用图库（非一期范围） |
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| P0 | 表结构 + `schema_migrations` 迁移 | **完成**（`app/memory/migrations.py` v1） |
+| P1 | `MemoryManager` + 单元测试 | **完成**（`app/memory/manager.py`，`tests/test_memory_manager.py`） |
+| P2 | 与 `retrieve_knowledge` 聚合 | **完成**（`app/tools/unified_context_tool.py`，`memory_merge_limit` 配置） |
+| P3 | 过期、整合 consolidate、多策略清理 | **部分完成**（软删 + purge + stats；**TTL 自动任务 / consolidate 摘要** 未做） |
+| P4 | 专用图库评估 | **未做**（仍不引入 Neo4j） |
+
+**配置项（环境变量可读）**：`memory_db_path`、`memory_merge_limit`（见 `app/config.py`）。
 
 ---
 
@@ -306,9 +309,66 @@ flowchart TB
 ## 7. 待确认事项（更新）
 
 1. **租户 / 用户**：**已定** — 个人项目，不做用户或租户区分（无 `tenant_id`）。  
-2. **写入策略**：仅用户显式「记住」 / 允许 Agent 自动摘要（及配额）。  
-3. **Episodic 向量**：独立 collection / `biz` + metadata 区分 / 一期不向量化。
+2. **写入策略**：仅用户显式「记住」 / 允许 Agent 自动摘要（及配额）— **仍为产品策略，代码未强制**。  
+3. **Episodic 向量**：独立 collection / `biz` + metadata 区分 / 一期不向量化 — **未强制**；当前 `milvus_refs` 仅占位写入。
 
 ---
 
-*文档版本：含完整架构图与 SQLite 讨论稿。定稿后可拆实施任务清单。*
+## 8. 实施记录（与仓库代码一致，便于追溯）
+
+以下按模块罗列 **已实现** 内容（不含 AIOps 侧记忆挂钩）。
+
+### 8.1 数据与核心逻辑
+
+| 项 | 说明 |
+|----|------|
+| SQLite 文件 | 默认 `data/memory.sqlite`（`memory_db_path`），`data/.gitkeep` 保留目录 |
+| 表 | `memories`、`memory_milvus_refs`、`memory_tags`、`schema_migrations` |
+| `MemoryManager` | `add_memory`、`retrieve_memories`、`soft_delete_memory`、`purge_session_memories`、`get_memory_stats`；连接 `_session` WAL + `PRAGMA foreign_keys` |
+
+### 8.2 HTTP（`app/api/memory.py`，前缀 `/api`）
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| POST | `/memory` | 创建记忆 |
+| GET | `/memory` | 列表检索（Query：`query`、`session_id`、`kind`、`limit`、`include_deleted`） |
+| GET | `/memory/stats` | 统计活跃/软删/按 kind/去重会话数 |
+| DELETE | `/memory/{memory_id}` | 单条软删 |
+| POST | `/memory/purge?session_id=` | **按会话批量软删**（必须用 POST） |
+| DELETE | `/memory/purge` | 防呆：返回 **405**，提示勿用 DELETE 调 purge |
+
+### 8.3 对话与清空（`app/api/chat.py`、`app/models/request.py`）
+
+| 项 | 说明 |
+|----|------|
+| `ClearRequest` | 可选 **`wipe_sqlite_memories`**，请求 JSON 可用 **`wipeSqliteMemories`**（Pydantic alias），默认 `false` |
+| `POST /api/chat/clear` | checkpointer 清空成功后，若 `wipeSqliteMemories=true` 则 `purge_session_memories(session_id)`；`data` 返回 `memories_purged` 等 |
+
+### 8.4 RAG Agent 工具（`app/services/rag_agent_service.py` + `app/tools/`）
+
+| 项 | 说明 |
+|----|------|
+| `ContextVar` | `memory_tool.memory_session_token_set/reset`，在 `query` / `query_stream` 包一层，绑定 **`session_id` = 请求的 thread** |
+| 工具 | `save_session_memory`、`recall_session_memories`、`retrieve_enriched_context`、`retrieve_knowledge`、MCP 等 |
+| 合并检索 | `retrieve_enriched_context`：先知识库再本会话记忆，两段 Markdown 标题输出 |
+| 辅助 | `get_memory_session_id_for_tools()` 供统一检索读会话 |
+
+### 8.5 测试
+
+| 文件 | 覆盖 |
+|------|------|
+| `tests/test_memory_manager.py` | CRUD、软删、purge、stats、标签、payload 等 |
+| `tests/test_memory_api.py` | REST 子应用 + purge 防呆 DELETE→405 |
+| `tests/test_memory_tools.py` | 工具与 ContextVar |
+| `tests/test_unified_context_tool.py` | 合并检索 |
+| `tests/test_chat_clear_memory.py` | clear + wipe |
+
+### 8.6 明确未做 / 后续
+
+- **AIOps**：planner/executor/replanner **未**绑 `session_id` 与记忆工具（需求优先级延后）。  
+- **自动 TTL / consolidate**、**FTS5**、**记忆条目强制写 Milvus**：未做。  
+- **前端**：未改静态页；仅靠 API / Apifox / Navicat 调试。
+
+---
+
+*文档版本：规划稿 + 实施记录（2026-05）。*
