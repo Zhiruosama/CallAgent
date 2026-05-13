@@ -20,7 +20,8 @@ from typing_extensions import TypedDict
 from langchain_qwq import ChatQwen
 
 from app.config import config
-from app.tools import get_current_time, retrieve_knowledge
+from app.tools import get_current_time, recall_session_memories, retrieve_knowledge, save_session_memory
+from app.tools.memory_tool import memory_session_token_reset, memory_session_token_set
 from app.agent.mcp_client import get_mcp_client_with_retry
 
 # 阿里千问大模型和langchain集成参考： https://docs.langchain.com/oss/python/integrations/chat/qwen
@@ -94,8 +95,13 @@ class RagAgentService:
             streaming=streaming,
         )
 
-        # 定义基础工具
-        self.tools = [retrieve_knowledge, get_current_time]
+        # 定义基础工具（会话记忆工具依赖 ContextVar，由 query/query_stream 绑定 session_id）
+        self.tools = [
+            retrieve_knowledge,
+            get_current_time,
+            save_session_memory,
+            recall_session_memories,
+        ]
 
         # MCP 客户端（延迟初始化，使用全局管理）
         self.mcp_tools: list = []
@@ -158,8 +164,9 @@ class RagAgentService:
             工作原则:
             1. 理解用户需求，选择合适的工具来完成任务
             2. 当需要获取实时信息或专业知识时，主动使用相关工具
-            3. 基于工具返回的结果提供准确、专业的回答
-            4. 如果工具无法提供足够信息，请诚实地告知用户
+            3. 当用户要求记住跨轮信息、或存在需要后续对话沿用的约定/事实时，使用记忆工具写入；需要回忆本会话已保存内容时使用记忆检索工具
+            4. 基于工具返回的结果提供准确、专业的回答
+            5. 如果工具无法提供足够信息，请诚实地告知用户
 
             回答要求:
             - 保持友好、专业的语气
@@ -206,10 +213,14 @@ class RagAgentService:
                 }
             }
 
-            result = await self.agent.ainvoke(
-                input=agent_input,
-                config=config_dict,
-            )
+            mem_tok = memory_session_token_set(session_id)
+            try:
+                result = await self.agent.ainvoke(
+                    input=agent_input,
+                    config=config_dict,
+                )
+            finally:
+                memory_session_token_reset(mem_tok)
 
             # 提取最终答案
             messages_result = result.get("messages", [])
@@ -270,30 +281,34 @@ class RagAgentService:
                 }
             }
 
-            async for token, metadata in self.agent.astream(
-                input=agent_input,
-                config=config_dict,
-                stream_mode="messages",
-            ):
-                node_name = metadata.get('langgraph_node', 'unknown') if isinstance(metadata, dict) else 'unknown'
-                message_type = type(token).__name__
+            mem_tok = memory_session_token_set(session_id)
+            try:
+                async for token, metadata in self.agent.astream(
+                    input=agent_input,
+                    config=config_dict,
+                    stream_mode="messages",
+                ):
+                    node_name = metadata.get('langgraph_node', 'unknown') if isinstance(metadata, dict) else 'unknown'
+                    message_type = type(token).__name__
 
-                if message_type in ("AIMessage", "AIMessageChunk"):
-                    content_blocks = getattr(token, 'content_blocks', None)
+                    if message_type in ("AIMessage", "AIMessageChunk"):
+                        content_blocks = getattr(token, 'content_blocks', None)
 
-                    if content_blocks and isinstance(content_blocks, list):
-                        for block in content_blocks:
-                            if isinstance(block, dict) and block.get('type') == 'text':
-                                text_content = block.get('text', '')
-                                if text_content:
-                                    yield {
-                                        "type": "content",
-                                        "data": text_content,
-                                        "node": node_name
-                                    }
+                        if content_blocks and isinstance(content_blocks, list):
+                            for block in content_blocks:
+                                if isinstance(block, dict) and block.get('type') == 'text':
+                                    text_content = block.get('text', '')
+                                    if text_content:
+                                        yield {
+                                            "type": "content",
+                                            "data": text_content,
+                                            "node": node_name
+                                        }
 
-            logger.info(f"[会话 {session_id}] RAG Agent 查询完成（流式）")
-            yield {"type": "complete"}
+                logger.info(f"[会话 {session_id}] RAG Agent 查询完成（流式）")
+                yield {"type": "complete"}
+            finally:
+                memory_session_token_reset(mem_tok)
 
         except Exception as e:
             logger.error(f"[会话 {session_id}] RAG Agent 查询失败（流式）: {e}")
