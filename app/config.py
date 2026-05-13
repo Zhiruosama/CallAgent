@@ -44,6 +44,8 @@ class Settings(BaseSettings):
 
     # 记忆系统（SQLite，路径扩展名一般为 .sqlite，已在 .gitignore 中忽略）
     memory_db_path: str = "data/memory.sqlite"
+    # 统一检索工具中，本会话记忆最多返回条数（1–20）
+    memory_merge_limit: int = 8
 
     # MCP 服务配置
     mcp_cls_transport: str = "streamable-http"

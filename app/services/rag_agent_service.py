@@ -20,7 +20,7 @@ from typing_extensions import TypedDict
 from langchain_qwq import ChatQwen
 
 from app.config import config
-from app.tools import get_current_time, recall_session_memories, retrieve_knowledge, save_session_memory
+from app.tools import get_current_time, recall_session_memories, retrieve_enriched_context, retrieve_knowledge, save_session_memory
 from app.tools.memory_tool import memory_session_token_reset, memory_session_token_set
 from app.agent.mcp_client import get_mcp_client_with_retry
 
@@ -97,6 +97,7 @@ class RagAgentService:
 
         # 定义基础工具（会话记忆工具依赖 ContextVar，由 query/query_stream 绑定 session_id）
         self.tools = [
+            retrieve_enriched_context,
             retrieve_knowledge,
             get_current_time,
             save_session_memory,
@@ -163,7 +164,7 @@ class RagAgentService:
 
             工作原则:
             1. 理解用户需求，选择合适的工具来完成任务
-            2. 当需要获取实时信息或专业知识时，主动使用相关工具
+            2. 当需要获取实时信息或专业知识时，主动使用相关工具；若问题可能同时涉及知识库文档与本会话已保存记忆，优先使用「retrieve_enriched_context」一次检索两类来源
             3. 当用户要求记住跨轮信息、或存在需要后续对话沿用的约定/事实时，使用记忆工具写入；需要回忆本会话已保存内容时使用记忆检索工具
             4. 基于工具返回的结果提供准确、专业的回答
             5. 如果工具无法提供足够信息，请诚实地告知用户

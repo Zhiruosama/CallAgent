@@ -31,6 +31,11 @@ def _current_session_id() -> str | None:
     return _memory_session_id.get()
 
 
+def get_memory_session_id_for_tools() -> str | None:
+    """供统一检索等模块读取当前请求绑定的会话 ID（未绑定时为 None）。"""
+    return _current_session_id()
+
+
 _ALLOWED_SAVE_KINDS = frozenset({"episodic", "semantic_ref", "scratch", "meta"})
 
 
