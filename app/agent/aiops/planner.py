@@ -16,6 +16,7 @@ from app.tools import (
     retrieve_enriched_context,
     retrieve_knowledge,
     save_session_memory,
+    tavily_web_search,
 )
 from app.agent.mcp_client import get_mcp_client_with_retry
 from .state import PlanExecuteState
@@ -97,6 +98,7 @@ async def planner(state: PlanExecuteState) -> Dict[str, Any]:
         local_tools = [
             retrieve_enriched_context,
             retrieve_knowledge,
+            tavily_web_search,
             get_current_time,
             save_session_memory,
             recall_session_memories,

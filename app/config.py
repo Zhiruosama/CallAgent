@@ -44,6 +44,17 @@ class Settings(BaseSettings):
     agent_openai_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     agent_openai_api_key: str = ""
     agent_openai_model: str = ""
+    # DeepSeek OpenAI 兼容：V4 等默认 thinking=enabled；Agent 多轮+工具常无法回传 reasoning_content。
+    # AGENT_THINKING_DISABLED=true：任意 base_url 均附带 thinking=disabled。
+    # AGENT_DEEPSEEK_AUTO_DISABLE_THINKING=false：仅在对 api.deepseek.com 时不自动关 thinking（默认自动关）。
+    agent_thinking_disabled: bool = False
+    agent_deepseek_auto_disable_thinking: bool = True
+
+    # Tavily 联网搜索（https://tavily.com，Agent 工具 tavily_web_search）
+    tavily_api_key: str = ""
+    tavily_max_results: int = 5
+    # basic | advanced | fast | ultra-fast（费用与延迟见 Tavily 文档）
+    tavily_search_depth: str = "basic"
 
     # 文档分块配置
     chunk_max_size: int = 800
